@@ -1,9 +1,9 @@
 `timescale 1ns / 1ps
 
 module tb_uart_top ();
-    
+
     parameter BAUD_TICK = (100_000_000 / 9600) * 10;
-    reg clk,reset,btn_R;
+    reg clk, reset, btn_R;
     wire tx;
 
     uart_controller dut (
@@ -16,19 +16,34 @@ module tb_uart_top ();
     always #5 clk = ~clk;
 
     initial begin
-        clk = 0;
+
+        clk   = 0;
         reset = 1;
         btn_R = 0;
-        #20;
-        reset = 0;
+        #10;
+        reset = 10;
 
-        #1000;
+        #10;
         btn_R = 1;
-        #(BAUD_TICK * 10);
-        #10
-        btn_R = 0;
-        #300;
+        #10_000;  //for BTN debounce
 
+        #(BAUD_TICK * 12);
+        #100;
         $stop;
+
+        //     clk = 0;
+        //     reset = 1;
+        //     btn_R = 0;
+        //     #20;
+        //     reset = 0;
+
+        //     #1000;
+        //     btn_R = 1;
+        //     #(BAUD_TICK * 10);
+        //     #10
+        //     btn_R = 0;
+        //     #300;
+
+        //     $stop;
     end
 endmodule
