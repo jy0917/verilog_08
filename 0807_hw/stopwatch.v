@@ -68,12 +68,11 @@ module top_stopwatch (
     assign w_fnd_state = (sw[1]) ? w_state : 2'b00;
 
     wire w_rx, w_tx;
+    wire w_rx_done;
     wire [7:0] w_ascii_in, w_ascii_out;
+    // wire w_ascii_in_run, w_ascii_in_stop;
     wire w_runstop_fsm;  //stopwatch control unit 결과
     //r이면 무조건 run, s면 무조건 stop, 둘 다 아니면 버튼 결과 그대로
-    assign w_runstop = w_ascii_out[6] ? 1'b0 :
-                        w_ascii_out[7] ? 1'b1 :
-                        w_runstop_fsm;
     wire [7:0] w_ascii_pulse = w_ascii_out & {8{w_rx_done}};
     uart_loop_back U_UART_LOOP_BACK (
         .clk(clk),
@@ -124,8 +123,10 @@ module top_stopwatch (
         .clk(clk),
         .reset(reset),
         .i_runstop(w_btn_L & !sw[1]),
-        .i_clear(w_btn_R & !sw[1] | w_ascii_pulse[5]),
-        .i_mode(w_btn_UP & !sw[1] | w_ascii_pulse[4]),
+        .w_ascii_in_run(w_ascii_pulse[7]),
+        .w_ascii_in_stop(w_ascii_pulse[6]),
+        .i_clear((w_btn_R & !sw[1]) || w_ascii_pulse[5]),
+        .i_mode((w_btn_UP & !sw[1]) || w_ascii_pulse[4]),
         .i_save_load(w_btn_DOWN & !sw[1]),  // btn down
         .i_is_data_saved(w_is_data_saved), // datapath에 데이터 저장되어 있는지 t/f 
         .o_runstop(w_runstop_fsm),
@@ -140,7 +141,7 @@ module top_stopwatch (
     stopwatch_datapath U_DATAPATH (
         .clk            (clk),
         .reset          (reset),
-        .runstop        (w_runstop),
+        .runstop        (w_runstop_fsm),
         .clear          (w_clear),
         .mode           (w_mode),
         .save           (w_save),

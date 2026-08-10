@@ -41,6 +41,7 @@ module watch_control_unit (
             MIN:
             if (btn_R == 1) next_state = SEC;
             else if (btn_L == 1) next_state = HOUR;
+            
             SEC:
             if (btn_R == 1) next_state = START;
             else if (btn_L == 1) next_state = MIN;

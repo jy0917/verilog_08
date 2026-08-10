@@ -1,17 +1,19 @@
 `timescale 1ns / 1ps
 
 module control_unit (
-    input  clk,
-    input  reset,
-    input  i_runstop,
-    input  i_clear,
-    input  i_mode,
-    input  i_save_load, // btn down
+    input clk,
+    input reset,
+    input i_runstop,
+    input i_clear,
+    input i_mode,
+    input i_save_load,  // btn down
     input i_is_data_saved, // datapath에 데이터 저장되어 있는지 t/f 
+    input w_ascii_in_run,
+    input w_ascii_in_stop,
     output o_runstop,
     output o_clear,
     output o_mode,
-    output o_save, // data save trigger signal
+    output o_save,  // data save trigger signal
     output o_load  // data load trigger signal
 
 );
@@ -34,6 +36,7 @@ module control_unit (
     assign o_mode = mode_reg;
     assign o_save = save_reg;
     assign o_load = load_reg;
+
 
     //state register
     always @(posedge clk, posedge reset) begin
@@ -69,7 +72,7 @@ module control_unit (
                 clear_next = 1'b0;
                 load_next = 1'b0;
                 save_next = 1'b0;
-                if (i_runstop==1) n_state = RUN;
+                if (i_runstop == 1 | w_ascii_in_run) n_state = RUN;
                 else if (i_clear) n_state = CLEAR;
                 else if (i_mode) n_state = MODE;
                 else if (i_save_load & !i_is_data_saved) n_state = SAVE;
@@ -78,13 +81,15 @@ module control_unit (
             end
             RUN: begin
                 run_stop_next = 1'b1;
-                if (i_runstop ) begin
+                if (i_runstop | w_ascii_in_stop) begin
                     n_state = STOP;
                 end
             end
             CLEAR: begin
                 clear_next = 1'b1;
-                n_state = STOP;
+                if (i_clear) begin
+                    n_state = STOP;
+                end
             end
             MODE: begin
                 mode_next = ~mode_reg;
