@@ -7,20 +7,23 @@ module top_stopwatch (
     input btn_R,  // clear(s) / 자리변경(w)
     input btn_UP,  // mode(s) / up(w)
     input btn_DOWN,  // option(s) / down(w)
-    input  [1:0] sw,        // sw[0]: 0-초:밀리초/1-시:분 sw[1]: 0-stopwatch/1-watch
+    input rx,
+    input  [2:0] sw,        // sw[0]: 0-초:밀리초/1-시:분 sw[1]: 0-stopwatch/1-watch, sw[2] : watch의 12시간제
     output [3:0] fnd_com,
     output [7:0] fnd_data,
-    output [1:0] led  // indicator
+    output led,  // indicator
+    output tx
 );
-    // 아직 아무 기능이 없으니 일단 켜두기
-    assign led = 2'b11;
 
     // btn debounder OUTPUT SIGNAL
     wire w_btn_L, w_btn_R, w_btn_UP, w_btn_DOWN;
 
     // control unit -> datapath
-    wire w_runstop, w_clear, w_mode;
+    wire w_runstop, w_clear, w_mode, w_save, w_load;
+    wire w_is_data_saved;
 
+    // 값 저장 상태를 출력
+    assign led = w_is_data_saved;
 
     wire [1:0] w_state;
     wire [1:0] w_fnd_state;
@@ -40,12 +43,52 @@ module top_stopwatch (
     wire [5:0] w_sec_watch, w_min_watch;
     wire [4:0] w_hour_watch;
 
+    // watch의 12시간제
+    wire w_format12_watch;
+    reg [4:0] w_hour_display_watch;
+    assign w_format12_watch = sw[2];
+
+    always @(*) begin
+        w_hour_display_watch = w_hour_watch; //sw[2] = 0이면 원래 24시간제
+        if (w_format12_watch) begin  //12시간제 스위치 키면
+            if (w_hour_watch > 12)
+                w_hour_display_watch = w_hour_watch - 12;  //13~23을 1~11로
+            else if (w_hour_watch == 0)
+                w_hour_display_watch = 12;  //00시를 12시로
+        end
+    end
+
     assign w_msec = (sw[1]) ? w_msec_watch : w_msec_stopwatch;
     assign w_sec = (sw[1]) ? w_sec_watch : w_sec_stopwatch;
     assign w_min = (sw[1]) ? w_min_watch : w_min_stopwatch;
-    assign w_hour = (sw[1]) ? w_hour_watch : w_hour_stopwatch;
+
+    // watch일 땐 12시간제, stopwatch는 w_hour_stopwatch로
+    assign w_hour = (sw[1]) ? w_hour_display_watch : w_hour_stopwatch;
 
     assign w_fnd_state = (sw[1]) ? w_state : 2'b00;
+
+    wire w_rx, w_tx;
+    wire [7:0] w_ascii_in, w_ascii_out;
+    wire w_runstop_fsm;  //stopwatch control unit 결과
+    //r이면 무조건 run, s면 무조건 stop, 둘 다 아니면 버튼 결과 그대로
+    assign w_runstop = w_ascii_out[6] ? 1'b0 :
+                        w_ascii_out[7] ? 1'b1 :
+                        w_runstop_fsm;
+    uart_loop_back U_UART_LOOP_BACK (
+        .clk(clk),
+        .reset(reset),
+        .rx(rx),
+        .tx(tx),
+        .rx_data(w_ascii_in),
+        .rx_done()
+    );
+
+    ascii_decoder U_ASCII_DC (
+        .clk(clk),
+        .reset(reset),
+        .ascii_in(w_ascii_in),
+        .ascii_out(w_ascii_out)
+    );
 
     btn_debouncer U_DB_BTN_L (
         .clk  (clk),
@@ -77,35 +120,43 @@ module top_stopwatch (
 
     // stopwatch control unit
     control_unit U_CNTL_UNIT (
-        .clk      (clk),
-        .reset    (reset),
+        .clk(clk),
+        .reset(reset),
         .i_runstop(w_btn_L & !sw[1]),
-        .i_clear  (w_btn_R & !sw[1]),
-        .i_mode   (w_btn_UP & !sw[1]),
-        .o_runstop(w_runstop),
-        .o_clear  (w_clear),
-        .o_mode   (w_mode)
+        .i_clear(w_btn_R & !sw[1] | w_ascii_out[5]),
+        .i_mode(w_btn_UP & !sw[1] | w_ascii_out[4]),
+        .i_save_load(w_btn_DOWN & !sw[1]),  // btn down
+        .i_is_data_saved(w_is_data_saved), // datapath에 데이터 저장되어 있는지 t/f 
+        .o_runstop(w_runstop_fsm),
+        .o_clear(w_clear),
+        .o_mode(w_mode),
+        .o_save(w_save),
+        .o_load(w_load)
     );
+
 
     // stopwatch datapath
     stopwatch_datapath U_DATAPATH (
-        .clk    (clk),
-        .reset  (reset),
-        .runstop(w_runstop),
-        .clear  (w_clear),
-        .mode   (w_mode),
-        .m_sec  (w_msec_stopwatch),
-        .sec    (w_sec_stopwatch),
-        .min    (w_min_stopwatch),
-        .hour   (w_hour_stopwatch)
+        .clk            (clk),
+        .reset          (reset),
+        .runstop        (w_runstop),
+        .clear          (w_clear),
+        .mode           (w_mode),
+        .save           (w_save),
+        .load           (w_load),
+        .o_is_data_saved(w_is_data_saved),
+        .m_sec          (w_msec_stopwatch),
+        .sec            (w_sec_stopwatch),
+        .min            (w_min_stopwatch),
+        .hour           (w_hour_stopwatch)
     );
 
     // watch control unit
     watch_control_unit U_CNTL_UNIT_WATCH (
         .clk  (clk),
         .reset(reset),
-        .btn_L(w_btn_L & sw[1]),
-        .btn_R(w_btn_R & sw[1]),
+        .btn_L(w_btn_L & sw[1] | w_ascii_out[1]),
+        .btn_R(w_btn_R & sw[1] | w_ascii_out[0]),
         .state(w_state)
     );
 
@@ -130,7 +181,7 @@ module top_stopwatch (
         .min(w_min),
         .hour(w_hour),
         .state(w_fnd_state),
-        .sw(sw),
+        .sw(sw[1:0]),
         .display_mode(sw[0]),  // sw[0] -> 0=초/1=시간 선택
         .fnd_com(fnd_com),
         .fnd_data(fnd_data)
@@ -144,18 +195,48 @@ module stopwatch_datapath #(
     MIN_WIDTH = 6,
     HOUR_WIDTH = 5
 ) (
-    input                   clk,
-    input                   reset,
-    input                   runstop,
-    input                   clear,
-    input                   mode,
-    output [MSEC_WIDTH-1:0] m_sec,
-    output [ SEC_WIDTH-1:0] sec,
-    output [ MIN_WIDTH-1:0] min,
-    output [HOUR_WIDTH-1:0] hour
+    input                       clk,
+    input                       reset,
+    input                       runstop,
+    input                       clear,
+    input                       mode,
+    input                       save,
+    input                       load,
+    output reg                  o_is_data_saved,
+    output     [MSEC_WIDTH-1:0] m_sec,
+    output     [ SEC_WIDTH-1:0] sec,
+    output     [ MIN_WIDTH-1:0] min,
+    output     [HOUR_WIDTH-1:0] hour
 );
 
     wire w_tick_msec, w_tick_sec, w_tick_min, w_tick_hour;
+
+    // f/f에 저장된 시간 데이터
+    reg [MSEC_WIDTH-1:0] w_saved_msec;
+    reg [ SEC_WIDTH-1:0] w_saved_sec;
+    reg [ MIN_WIDTH-1:0] w_saved_min;
+    reg [HOUR_WIDTH-1:0] w_saved_hour;
+
+    always @(posedge clk, posedge reset) begin
+        if (reset) begin
+            w_saved_msec <= 0;
+            w_saved_sec <= 0;
+            w_saved_min <= 0;
+            w_saved_hour <= 0;
+            o_is_data_saved <= 0;
+        end else begin
+            if (save) begin
+                w_saved_msec <= m_sec;
+                w_saved_sec <= sec;
+                w_saved_min <= min;
+                w_saved_hour <= hour;
+                o_is_data_saved <= 1;
+            end
+            if (load) begin
+                o_is_data_saved <= 0;
+            end
+        end
+    end
 
     tick_gen_100hz GEN_100HZ (
         .clk(clk),
@@ -172,6 +253,8 @@ module stopwatch_datapath #(
         .mode(mode),
         .run_stop(runstop),
         .clear(clear),
+        .load(load),
+        .value(w_saved_msec),
         .time_cnt(m_sec),
         .o_tick(w_tick_sec)
     );
@@ -185,6 +268,8 @@ module stopwatch_datapath #(
         .mode(mode),
         .run_stop(runstop),
         .clear(clear),
+        .load(load),
+        .value(w_saved_sec),
         .time_cnt(sec),
         .o_tick(w_tick_min)
     );
@@ -198,6 +283,8 @@ module stopwatch_datapath #(
         .mode(mode),
         .run_stop(runstop),
         .clear(clear),
+        .load(load),
+        .value(w_saved_min),
         .time_cnt(min),
         .o_tick(w_tick_hour)
     );
@@ -211,6 +298,8 @@ module stopwatch_datapath #(
         .mode(mode),
         .run_stop(runstop),
         .clear(clear),
+        .load(load),
+        .value(w_saved_hour),
         .time_cnt(hour),
         .o_tick()
     );
@@ -226,26 +315,11 @@ module time_counter #(
     input mode,
     input run_stop,
     input clear,
+    input load,
+    input [$clog2(COUNT_NUM)-1:0] value,
     output reg [$clog2(COUNT_NUM)-1:0] time_cnt,
     output reg o_tick
 );
-
-    // always @(posedge clk, posedge reset) begin
-    //     if (reset) begin
-    //         time_cnt <= 0;
-    //         o_tick   <= 1'b0;
-    //     end else begin
-    //         if (i_tick) begin
-    //             time_cnt <= time_cnt + 1;
-    //             if (time_cnt == (COUNT_NUM - 1)) begin
-    //                 time_cnt <= 0;
-    //                 o_tick   <= 1'b1;
-    //             end
-    //         end else begin
-    //             o_tick <= 1'b0;
-    //         end
-    //     end
-    // end
 
     always @(posedge clk, posedge reset) begin
         if (reset | clear) begin
@@ -269,6 +343,7 @@ module time_counter #(
             end else begin
                 o_tick <= 1'b0;
             end
+            if (load) time_cnt <= value;
         end
     end
 
