@@ -74,13 +74,14 @@ module top_stopwatch (
     assign w_runstop = w_ascii_out[6] ? 1'b0 :
                         w_ascii_out[7] ? 1'b1 :
                         w_runstop_fsm;
+    wire [7:0] w_ascii_pulse = w_ascii_out & {8{w_rx_done}};
     uart_loop_back U_UART_LOOP_BACK (
         .clk(clk),
         .reset(reset),
         .rx(rx),
         .tx(tx),
         .rx_data(w_ascii_in),
-        .rx_done()
+        .rx_done(w_rx_done)
     );
 
     ascii_decoder U_ASCII_DC (
@@ -123,8 +124,8 @@ module top_stopwatch (
         .clk(clk),
         .reset(reset),
         .i_runstop(w_btn_L & !sw[1]),
-        .i_clear(w_btn_R & !sw[1] | w_ascii_out[5]),
-        .i_mode(w_btn_UP & !sw[1] | w_ascii_out[4]),
+        .i_clear(w_btn_R & !sw[1] | w_ascii_pulse[5]),
+        .i_mode(w_btn_UP & !sw[1] | w_ascii_pulse[4]),
         .i_save_load(w_btn_DOWN & !sw[1]),  // btn down
         .i_is_data_saved(w_is_data_saved), // datapath에 데이터 저장되어 있는지 t/f 
         .o_runstop(w_runstop_fsm),
@@ -155,8 +156,8 @@ module top_stopwatch (
     watch_control_unit U_CNTL_UNIT_WATCH (
         .clk  (clk),
         .reset(reset),
-        .btn_L(w_btn_L & sw[1] | w_ascii_out[1]),
-        .btn_R(w_btn_R & sw[1] | w_ascii_out[0]),
+        .btn_L(w_btn_L & sw[1] | w_ascii_pulse[1]),
+        .btn_R(w_btn_R & sw[1] | w_ascii_pulse[0]),
         .state(w_state)
     );
 
@@ -164,8 +165,8 @@ module top_stopwatch (
     watch_datapath U_DATAPATH_WATCH (
         .clk  (clk),
         .reset(reset),
-        .up   (w_btn_UP & sw[1]),
-        .down (w_btn_DOWN & sw[1]),
+        .up   (w_btn_UP & sw[1] | w_ascii_pulse[3]),
+        .down (w_btn_DOWN & sw[1] | w_ascii_pulse[2]),
         .state(w_state),
         .msec(w_msec_watch),
         .sec  (w_sec_watch),
