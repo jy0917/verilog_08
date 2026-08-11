@@ -118,7 +118,7 @@ module control_unit #(
             end
             2'b01: begin
                 //pop only
-                if (!empty) begin
+                if (!empty_reg) begin
                     rptr_next = rptr_reg + 1;
                     full_next = 1'b0;
                     //wptr은 변화가 없었으므로 reg든 next든 상관 x
@@ -129,7 +129,7 @@ module control_unit #(
             end
             2'b10: begin
                 //push only
-                if (!full) begin
+                if (!full_reg) begin
                     wptr_next  = wptr_reg + 1;
                     empty_next = 1'b0;
                     if (wptr_next == rptr_reg) begin
