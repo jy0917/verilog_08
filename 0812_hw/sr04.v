@@ -34,9 +34,13 @@ module sr04_controller (
         if (reset) begin
             c_state <= IDLE;
             counter_reg <= 0;
+            done_reg <= 1'b0;
+            distance_reg <= 9'd0;
         end else begin
             c_state <= n_state;
             counter_reg <= counter_next;
+            done_reg <= done_next;
+            distance_reg <= distance_next;
         end
     end
 
@@ -44,6 +48,8 @@ module sr04_controller (
     always @(*) begin
         n_state = c_state;
         counter_next = counter_reg;
+        done_next = done_reg;
+        distance_next = distance_reg;
         run_stop = 1'b0;
         clear = 1'b0;
         trigger = 1'b0;
@@ -69,6 +75,7 @@ module sr04_controller (
                 //시작하자마자 틱이 생성되는게 아니기 때문에 10이 아닌 11
                 //다음으로 바뀌려면 tick_cnt = 11
                 if (counter_reg == 11) begin
+                    counter_next = 0;
                     n_state = WAIT;
                 end
             end
@@ -78,11 +85,11 @@ module sr04_controller (
                 trigger = 1'b0;
                 if (w_tick_us) begin
                     if (echo) begin
+                        counter_next = counter_reg + 1;
                         n_state = COUNT;
-                        counter_next = 0;
                     end
                 end
-                // //test
+                //test
                 // n_state = IDLE;
                 // run_stop = 1'b0;
                 // clear = 1'b0;
@@ -94,17 +101,17 @@ module sr04_controller (
                 trigger = 1'b0;
                 if (w_tick_us) begin
                     if (echo) begin
-                        counter_next = counter_reg + 1;
+                        counter_next = counter_reg + 1; //echo=1인 동안 계속 카운트
                     end else begin
-                        n_state = DISTANCE;
+                        n_state = DISTANCE; /// echo=0으로 떨어지면 종료
                     end
                 end
             end
-            DISTANCE : begin
+            DISTANCE: begin
                 distance_next = counter_reg / 58;
                 done_next = 1'b1;
-                n_state = IDLE; 
-                end
+                n_state = IDLE;
+            end
         endcase
     end
 
