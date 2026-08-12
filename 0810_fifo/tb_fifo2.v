@@ -16,6 +16,7 @@ module tb_fifo2 ();
     reg [WIDTH-1:0] pop_cnt;
     integer pass_count = 0, fail_count = 0;
 
+
     fifo #(
         .WIDTH(2)
     ) dut (
@@ -128,26 +129,30 @@ module tb_fifo2 ();
                         $time, compare_buffer[pop_cnt], rdata, pop, empty);
                     fail_count = fail_count + 1;
                 end
-                if(push_cnt == 3'd4) begin
-                    if(full == 1'b1) begin
-                        $display(
-                        "%t : PASS !! compare_data = %d, rdata = %d, pop= %d, empty = %d",
-                        $time, compare_buffer[pop_cnt], rdata, pop, empty);
-                    pass_count = pass_count + 1;
-                    end
-                end else begin
-                    $display(
-                        "%t : FAIL !! compare_data = %d, rdata = %d, pop= %d, empty = %d",
-                        $time, compare_buffer[pop_cnt], rdata, pop, empty);
-                    fail_count = fail_count + 1;
-                end
-
-
                 pop_cnt = pop_cnt + 1;
             end
-            // #10;
-            //negedge 로 판단을 바꿨기 때문에
+            //push_cnt가 4가 될 때 full 검증
+            if ((push_cnt - pop_cnt) == 4) begin
+                if (full == 1'b1) begin
+                    $display("%t : FULL PASS !! ", $time);
+                    pass_count = pass_count + 1;
+                end else begin
+                    $display("%t : FULL FAIL !! ", $time, full);
+                    fail_count = fail_count + 1;
+                end
+            end
+            if ((push_cnt - pop_cnt) == 0) begin
+                if (empty == 1'b1) begin
+                    $display("%t : EMPTY PASS !!", $time);
+                    pass_count = pass_count + 1;
+                end else begin
+                    $display("%t : EMPTY FAIL!! ", $time, empty);
+                    fail_count = fail_count + 1;
+                end
+            end
         end
+        // #10;
+        //negedge 로 판단을 바꿨기 때문에
         $display("%t: pass count = %d, fail_count = %d", $time, pass_count,
                  fail_count);
         #100;
