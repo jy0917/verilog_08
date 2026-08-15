@@ -11,7 +11,7 @@ module dht11 (
     inout dht11_io
 );
 
-    localparam [2:0] IDLE = 0, START = 1, WAIT = 2, SYNC = 3, DATA = 4, STOP = 5;
+    localparam [2:0] IDLE = 0, START = 1, WAIT = 2, SYNC = 3, DATA_L = 4, DATA_H = 5, STOP = 6;
     reg [2:0] c_state, n_state;
     wire tick_us;
     reg [$clog2(19_000)-1:0] tick_count_reg, tick_count_next;
@@ -127,41 +127,33 @@ module dht11 (
                     end
                 end else begin
                     if (falling_edge) begin
-                        n_state   = DATA;
+                        n_state   = DATA_L;
                         sync_next = 0;
+                        bit_count_next = 0;
                     end
                 end
             end
-            DATA: begin
+            DATA_L: begin
                 dht11_io_next = 0;
                 io_control = 0;
-                if (tick_us) begin
-                    if (sync_reg == 0) begin
-                        if (rising_edge) begin
-                            sync_next = 1;
-                        end
-                    end else begin
-                        high_time_next = high_time_reg + 1;
-                        if (falling_edge) begin
-                            high_time_next = 0;
-                            bit_count_next = bit_count_reg + 1;
-                            shift_next = {
+                if(rising_edge) begin
+                    high_time_next = 0;
+                    n_state = DATA_H;
+                end
+            end
+            DATA_H : begin
+                io_control = 0;
+                if(falling_edge) begin
+                    bit_count_next = bit_count_reg + 1;
+                    shift_next = {
                                 shift_reg[38:0],
                                 (high_time_reg > 50) ? 1'b1 : 1'b0
                             };
-                        end
-                    end
-                    if (bit_count_reg == 40) begin
-                        n_state = STOP;
-                    end
+                            if(bit_count_reg + 1 == 40) n_state = STOP;
+                            else n_state = DATA_L;
+                end else if (tick_us) begin
+                    high_time_next = high_time_reg + 1;
                 end
-                // if (data_prev_reg == 1 && dht11_io == 0) high_time_next = 0;
-                // if (bit_count_reg == 40) begin
-                //     n_state = STOP;
-                // end else begin
-                //     high_time_next = high_time_reg + 1;
-                //     bit_count_next = bit_count_reg + 1;
-                // end
             end
             STOP: begin
                 dht11_io_next = 0;
